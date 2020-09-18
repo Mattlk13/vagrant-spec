@@ -1,5 +1,4 @@
-# This tests that synced folders work with a given provider.
-shared_examples "provider/synced_folder" do |provider, options|
+shared_examples "provider/synced_folder/smb" do |provider, options|
   if !options[:box]
     raise ArgumentError,
       "box option must be specified for provider: #{provider}"
@@ -8,8 +7,8 @@ shared_examples "provider/synced_folder" do |provider, options|
   include_context "acceptance"
 
   before do
-    environment.skeleton("synced_folders")
-    assert_execute("vagrant", "box", "add", "basic", options[:box])
+    environment.skeleton("synced_folder_smb")
+    assert_execute("vagrant", "box", "add", "box", options[:box])
     assert_execute("vagrant", "up", "--provider=#{provider}")
   end
 
@@ -17,37 +16,29 @@ shared_examples "provider/synced_folder" do |provider, options|
     assert_execute("vagrant", "destroy", "--force")
   end
 
-  # We put all of this in a single RSpec test so that we can test all
-  # the cases within a single VM rather than having to `vagrant up` many
-  # times.
-  it "properly configures synced folder types" do
-    status("Test: mounts the default /vagrant synced folder")
-    result = execute("vagrant", "ssh", "-c", "cat /vagrant/foo")
-    expect(result.exit_code).to eql(0)
+  # SMB is not supported for linux hosts
+  it "properly configures SMB", :skip_linux_hosts do
+    status("Test: does initial smb sync")
+    result = execute("vagrant", "ssh", "-c", "cat /vagrant-smb/foo")
+    expect(result).to exit_with(0)
     expect(result.stdout).to match(/hello$/)
 
     status("Test: doesn't mount a disabled folder")
     result = execute("vagrant", "ssh", "-c", "test -d /foo")
     expect(result.exit_code).to eql(1)
 
-    status("Test: guest has permissions to write to synced folder")
-    result = execute("vagrant", "ssh", "-c", "echo goodbye > /vagrant/bar")
-    expect(result.exit_code).to eql(0)
-
     status("Test: persists a sync folder after a manual reboot")
     result = execute("vagrant", "ssh", "-c", "sudo reboot")
     expect(result).to exit_with(255)
-    result = execute("vagrant", "ssh", "-c", "cat /vagrant/foo")
+    result = execute("vagrant", "ssh", "-c", "cat /vagrant-smb/foo")
     expect(result.exit_code).to eql(0)
     expect(result.stdout).to match(/hello$/)
 
     status("Test: persists a sync folder after a provisioner reboot")
     result = execute("vagrant", "provision", "--provision-with", "reboot")
     expect(result.exit_code).to eql(0)
-    # Need to do a manual sleep here because Vagrant doesn't know that the
-    # machine is rebooting
     sleep 10
-    result = execute("vagrant", "ssh", "-c", "cat /vagrant/foo")
+    result = execute("vagrant", "ssh", "-c", "cat /vagrant-smb/foo")
     expect(result.exit_code).to eql(0)
     expect(result.stdout).to match(/hello$/)
   end
